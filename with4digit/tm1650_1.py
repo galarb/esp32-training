@@ -16,7 +16,7 @@ class TM1650:
         # DIG = [0x68,0x6a,0x6c,0x6e]
         self.DIG = [0x6e,0x6c,0x6a,0x68]
         self.DOT = [0,0,0,0]
-
+        self.MINUS = 0x40   # segment G only
         self.DisplayCommand = 0
 
         self.setBrightness(brightness)
@@ -24,6 +24,11 @@ class TM1650:
         self.displayOnOFF(1)
         for i in range(4):
             self.clearBit(i)
+    
+    def displayRaw(self, bit, segdata):
+        # Same logic as displayBit but without NUM lookup
+        self.writeByte(self.DIG[bit])
+        self.writeByte(segdata)
     
     def writeByte(self,wr_data):
         for i in range(8):
@@ -154,25 +159,52 @@ class TM1650:
             self.DOT[bit-1] = 0
         return self
     
-    def ShowNum(self, num, bit = 1, clear_rest = True): #0~9999
-        self.displayBit(bit,num%10)
-        if num < 10 and clear_rest:
-            self.clearBit(bit+1)
-            self.clearBit(bit+2)
-            self.clearBit(bit+3)
-        if num > 9 and num < 100:
-            self.displayBit(bit+1,num//10%10)
-            if clear_rest:
-                self.clearBit(bit+2)
-                self.clearBit(bit+3)
-        if num > 99 and num < 1000:
-            self.displayBit(bit+1,num//10%10)
-            self.displayBit(bit+2,num//100%10)
-            if clear_rest:
-                self.clearBit(bit+3)
-        if num > 999 and num < 10000:
-            self.displayBit(bit+1,num//10%10)
-            self.displayBit(bit+2,num//100%10)
-            self.displayBit(bit+3,num//1000)
+    
+    def ShowNum(self, num, bit=1, clear_rest=True):
+        negative = num < 0
+        num = abs(num)
+
+        s = str(num)
+
+        if negative:
+            s = "-" + s
+
+        # Clip to 4 digits max
+        if len(s) > 4:
+            s = s[-4:]
+
+        # Clear display
+        if clear_rest:
+            for i in range(1, 5):
+                self.clearBit(i)
+
+        # Display from right to left
+        for i, ch in enumerate(reversed(s)):
+            current_bit = bit + i
+            if current_bit > 4:
+                break
+
+            if ch == "-":
+                self.displayMinus(current_bit)
+            else:
+                self.displayBit(current_bit, int(ch))
+
+    def displayMinus(self, bit):
+        self.start()
+        self.writeByte(self.ADDR_DIS)
+        self.ack()
+        self.writeByte(self.DisplayCommand)
+        self.ack()
+        self.stop()
+
+        self.start()
+        self.writeByte(self.DIG[bit-1])
+        self.ack()
+        self.writeByte(self.MINUS)
+        self.ack()
+        self.stop()
+
+        return self
+
 
 
